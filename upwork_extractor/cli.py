@@ -8,7 +8,6 @@ Usage:
     upwork-extract posting.html --format json
     upwork-extract posting.html --format markdown
     upwork-extract posting.html --format yaml
-    upwork-extract posting.html --out job.md
 """
 
 import argparse
@@ -37,12 +36,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="markdown",
         help="Output format (default: markdown)",
     )
-    parser.add_argument(
-        "--out", "-o",
-        type=Path,
-        default=None,
-        help="Write output to file instead of stdout",
-    )
     return parser.parse_args(argv)
 
 
@@ -70,11 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         output = job.to_markdown()
 
-    if args.out:
-        args.out.write_text(output, encoding="utf-8")
-        print(f"Written to {args.out}", file=sys.stderr)
-    else:
-        print(output)
+    sys.stdout.write(output)
 
     return 0
 

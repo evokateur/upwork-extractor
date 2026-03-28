@@ -216,20 +216,6 @@ def test_cli_yaml_output(capsys):
     assert captured.err == ""
 
 
-def test_cli_out_writes_markdown_file(tmp_path, capsys):
-    out_path = tmp_path / "job.md"
-
-    exit_code = cli.main([str(FIXTURE), "--out", str(out_path)])
-
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert out_path.exists()
-    assert out_path.read_text(encoding="utf-8").startswith("#")
-    assert f"Written to {out_path}" in captured.err
-    assert captured.out == ""
-
-
 # ------------------------------------------------------------------
 # Wrong-file error
 # ------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # upwork-extractor 🦷
 
 Extracts structured job data from saved Upwork job posting HTML files.
-Outputs Markdown, YAML, or JSON.
+Writes Markdown, YAML, or JSON to stdout.
 
 ## How to save the HTML file correctly
 
@@ -39,10 +39,9 @@ cp /path/to/saved-posting.html tests/fixtures/sample.html
 ## Usage
 
 ```bash
-upwork-extract posting.html                  # Markdown to stdout (default)
+upwork-extract posting.html
 upwork-extract posting.html --format json
 upwork-extract posting.html --format yaml
-upwork-extract posting.html --out job.md     # write to file
 ```
 
 ## Running tests
