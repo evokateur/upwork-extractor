@@ -1,18 +1,10 @@
 # upwork-extractor 🦷
 
-Extracts structured job data from saved Upwork job posting HTML files.
-Writes Markdown, YAML, or JSON to stdout.
+Extracts structured job data from saved Upwork job posting HTML files, generating Markdown, YAML, or JSON.
 
-## How to save the HTML file correctly
+## Use Case
 
-**You must open the job in its own browser tab before saving.**
-
-1. Click the job title so it opens at a URL like:
-   `https://www.upwork.com/freelance-jobs/apply/<slug>_~0<uid>/`
-2. Save the page: **File → Save Page As → "Webpage, HTML Only"**
-
-If you save the Find Work page while the job is open as a slide-over panel,
-the tool will tell you what went wrong and how to fix it.
+Meant to work with the HTML content of job postings opened in their own window, the URL having the form `https://www.upwork.com/jobs/<slug>`. Useful for agentic CV optimization based on the CAPTCHA-protected job posting content or for Obsidian notes.
 
 ## Installation
 
@@ -29,20 +21,14 @@ uv tool update-shell
 
 ## Local fixture for tests
 
-`tests/fixtures/sample.html` is not committed.
-
-To run the tests, save a real Upwork job posting page there:
-
-```bash
-cp /path/to/saved-posting.html tests/fixtures/sample.html
-```
+To run the tests, save the HTML of a real Upwork job posting to `tests/fixtures/sample.html`
 
 ## Usage
 
 ```bash
-upwork-extract posting.html
-upwork-extract posting.html --format json
-upwork-extract posting.html --format yaml
+upwork-extract posting.html > job-posting.md
+upwork-extract posting.html --format json > job-posting.json
+upwork-extract posting.html --format yaml > job-posting.yaml
 ```
 
 ## Running tests
