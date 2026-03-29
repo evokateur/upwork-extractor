@@ -9,8 +9,9 @@ Meant to work with the HTML content of job postings opened in their own window, 
 ## Installation
 
 ```bash
-uv tool install path/to/this-project-directory # or
-uv tool install --editable path/to/this-project-directory # reflects code changes when run
+cd upwork-extractor
+uv tool install . # or
+uv tool install --editable . # reflect code changes
 ```
 
 If `upwork-extract` is not found after installation:
