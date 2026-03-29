@@ -20,10 +20,8 @@ make install
 ## Usage
 
 ```bash
-upwork-extract posting.html
+upwork-extract posting.html # generates posting.md
 ```
-
-This writes `posting.md` next to the input file.
 
 ## Running tests
 
