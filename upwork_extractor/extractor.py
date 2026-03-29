@@ -15,17 +15,11 @@ _DEVALUE_SPECIAL_TAGS = frozenset({
 })
 
 _WRONG_FILE_ERROR = """\
-Could not find Upwork job data in this HTML file.
-
-This usually means the page was saved while the job was open as a slide-over
-panel on the Find Work page, rather than as a standalone tab.
-
-To fix this:
-  1. Click the job title to open it in its own browser tab.
-     (The URL should contain /freelance-jobs/apply/...)
-  2. Save that page as HTML: File → Save Page As → "Webpage, HTML Only".
-  3. Re-run this tool on the newly saved file.
+Could not find the expected Upwork job data in this HTML file.
 """
+
+_NOT_HTML_ERROR = "Input file does not contain HTML."
+_UPWORK_BASE_URL = "https://www.upwork.com"
 
 
 def _revive_devalue(data: list[Any]) -> Any:
@@ -87,18 +81,45 @@ def _render_markdown(html: str) -> str:
     return markdown.strip()
 
 
+def _contains_html(content: str) -> bool:
+    return bool(re.search(r"<[a-zA-Z][^>]*>", content))
+
+
+@dataclass
+class Attachment:
+    file_name: str
+    uri: str
+
+    @property
+    def url(self) -> str:
+        return f"{_UPWORK_BASE_URL}{self.uri}"
+
+
 @dataclass
 class ExtractedJob:
     title: str
     description_html: str
+    attachments: list[Attachment]
 
     def to_markdown(self) -> str:
         body = _render_markdown(self.description_html)
+        attachments = self._render_attachments()
         if self.title and body:
-            return f"# {self.title}\n\n{body}\n"
+            return f"# {self.title}\n\n{body}{attachments}"
         if self.title:
-            return f"# {self.title}\n"
-        return f"{body}\n" if body else ""
+            return f"# {self.title}{attachments}"
+        if body:
+            return f"{body}{attachments}"
+        return attachments.lstrip("\n") if attachments else ""
+
+    def _render_attachments(self) -> str:
+        if not self.attachments:
+            return "\n"
+
+        lines = ["", "", "## Attachments", ""]
+        for attachment in self.attachments:
+            lines.append(f"- [{attachment.file_name}]({attachment.url})")
+        return "\n".join(lines) + "\n"
 
 
 class UpworkExtractor:
@@ -122,6 +143,9 @@ class UpworkExtractor:
     def _get_state(self) -> dict[str, Any]:
         if self._state is not None:
             return self._state
+
+        if not _contains_html(self._html):
+            raise ValueError(_NOT_HTML_ERROR)
 
         for raw_json in self._PAYLOAD_RE.findall(self._html):
             try:
@@ -149,6 +173,7 @@ class UpworkExtractor:
         return ExtractedJob(
             title=job.get("title", "").strip(),
             description_html=description_html,
+            attachments=self._extract_attachments(job),
         )
 
     def _extract_description(self, job: dict[str, Any]) -> str:
@@ -157,3 +182,29 @@ class UpworkExtractor:
             if isinstance(value, str) and value.strip():
                 return value.strip()
         return ""
+
+    def _extract_attachments(self, job: dict[str, Any]) -> list[Attachment]:
+        attachments = job.get("attachments")
+        if not isinstance(attachments, list):
+            return []
+
+        extracted_attachments = []
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+
+            file_name = attachment.get("fileName")
+            uri = attachment.get("uri")
+            if not isinstance(file_name, str) or not file_name.strip():
+                continue
+            if not isinstance(uri, str) or not uri.startswith("/"):
+                continue
+
+            extracted_attachments.append(
+                Attachment(
+                    file_name=file_name.strip(),
+                    uri=uri,
+                )
+            )
+
+        return extracted_attachments

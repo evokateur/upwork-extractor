@@ -32,7 +32,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    sys.stdout.write(job.to_markdown())
+    output_file = args.file.with_suffix(".md")
+    output_file.write_text(job.to_markdown(), encoding="utf-8")
     return 0
 
 
