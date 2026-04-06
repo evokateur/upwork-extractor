@@ -1,6 +1,6 @@
-# posting-extract
+# posting-extractor
 
-Converts job posting HTML files into Markdown.
+Converts job posting HTML into Markdown.
 
 ## Use Case
 
