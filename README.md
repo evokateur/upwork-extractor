@@ -1,12 +1,15 @@
 # posting-extractor
 
-Converts job posting HTML into Markdown.
+Converts job posting HTML into Markdown. Works with HTML files or URLs.
 
 ## Use Case
 
-Useful for Obsidian notes, or job posting content for a CV optimization pipeline.
+Useful for LLM analysis and Obsidian notes.
 
-Works with saved HTML files and direct `http` or `https` job posting URLs.
+### Specialized Extractors (so far)
+
+- Upwork (saved HTML to get around CAPTCHA)
+- Welcome to the Jungle (URLs or `wget`-saved HTML)
 
 ## Installation
 
@@ -18,8 +21,8 @@ make install
 ## Usage
 
 ```bash
-posting-extract posting.html
-posting-extract posting.html custom.md
+posting-extract posting.html # creates posting.md
+posting-extract posting.html output.md
 ```
 
 ## Running tests
