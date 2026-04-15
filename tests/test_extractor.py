@@ -20,13 +20,18 @@ def make_saved_page(
     description: str,
     title: str = "Test Job",
     attachments: list[dict[str, object]] | None = None,
+    occupation_pref_label: str | None = None,
+    ontology_skill_groups: list[dict[str, object]] | None = None,
+    additional_skills: list[str] | None = None,
 ) -> str:
     attachments = attachments or []
+    ontology_skill_groups = ontology_skill_groups or []
+    additional_skills = additional_skills or []
     payload: list[object] = [
         ["Reactive", 1],
         {"vuex": 2},
         {"jobDetails": 3},
-        {"job": 4},
+        {"job": 4, "sands": 9},
         {
             "uid": 5,
             "title": 6,
@@ -36,6 +41,13 @@ def make_saved_page(
         "123456",
         title,
         description,
+        [],
+        {
+            "occupation": 10,
+            "ontologySkills": 11,
+            "additionalSkills": 12,
+        },
+        [],
         [],
     ]
 
@@ -57,6 +69,55 @@ def make_saved_page(
         attachment_indexes.append(attachment_index)
 
     payload[8] = attachment_indexes
+
+    if occupation_pref_label:
+        pref_label_index = len(payload)
+        payload.append(occupation_pref_label)
+
+        occupation_index = len(payload)
+        payload.append({"prefLabel": pref_label_index})
+        payload[9]["occupation"] = occupation_index
+
+    ontology_group_indexes = []
+    for group in ontology_skill_groups:
+        children_indexes = []
+        for child_name in group.get("children", []):
+            child_name_index = len(payload)
+            payload.append(child_name)
+
+            child_index = len(payload)
+            payload.append({"name": child_name_index})
+            children_indexes.append(child_index)
+
+        children_list_index = len(payload)
+        payload.append(children_indexes)
+
+        group_name_index = len(payload)
+        payload.append(group["name"])
+
+        group_index = len(payload)
+        payload.append(
+            {
+                "name": group_name_index,
+                "children": children_list_index,
+            }
+        )
+        ontology_group_indexes.append(group_index)
+
+    payload[9]["ontologySkills"] = len(payload)
+    payload.append(ontology_group_indexes)
+
+    additional_skill_indexes = []
+    for skill_name in additional_skills:
+        skill_name_index = len(payload)
+        payload.append(skill_name)
+
+        skill_index = len(payload)
+        payload.append({"name": skill_name_index})
+        additional_skill_indexes.append(skill_index)
+
+    payload[9]["additionalSkills"] = len(payload)
+    payload.append(additional_skill_indexes)
     raw_json = json.dumps(payload)
     return f'<html><body><script type="application/json">{raw_json}</script></body></html>'
 
@@ -243,6 +304,60 @@ def test_renders_attachments_as_markdown_links():
     assert "## Attachments" in job.to_markdown()
     assert "- [brief.pdf](https://www.upwork.com/att/download/openings/123/attachments/abc/download)" in job.to_markdown()
     assert "- [screenshot.png](https://www.upwork.com/att/download/openings/123/attachments/def/download)" in job.to_markdown()
+
+
+def test_upwork_extracts_structured_skills_and_expertise():
+    html = make_saved_page(
+        "<p>Converted</p>",
+        occupation_pref_label="Machine Learning",
+        ontology_skill_groups=[
+            {
+                "name": "Machine Learning Methods",
+                "children": ["Natural Language Processing"],
+            },
+            {
+                "name": "Machine Learning Languages",
+                "children": ["Python"],
+            },
+        ],
+        additional_skills=[
+            "OpenAI API",
+            "API Integration",
+            "Vector Database",
+            "Pinecone",
+            "Python",
+        ],
+    )
+
+    job = UpworkExtractor.from_string(html).extract()
+
+    assert job.skills_and_expertise == [
+        "Machine Learning",
+        "Natural Language Processing",
+        "Python",
+        "OpenAI API",
+        "API Integration",
+        "Vector Database",
+        "Pinecone",
+    ]
+    assert "## Skills and Expertise" in job.to_markdown()
+    assert "- Machine Learning" in job.to_markdown()
+    assert "- Natural Language Processing" in job.to_markdown()
+    assert "- API Integration" in job.to_markdown()
+    assert job.to_markdown().count("- Python") == 1
+
+
+def test_upwork_example_file_contains_skills_and_expertise_in_output():
+    html = Path("docs/examples/upwork.html").read_text(encoding="utf-8")
+
+    job = UpworkExtractor.from_string(html).extract()
+
+    assert "Natural Language Processing" in job.skills_and_expertise
+    assert "Python" in job.skills_and_expertise
+    assert "OpenAI API" in job.skills_and_expertise
+    assert "Vector Database" in job.skills_and_expertise
+    assert "Pinecone" in job.skills_and_expertise
+    assert "## Skills and Expertise" in job.to_markdown()
 
 
 def test_extract_job_posting_falls_back_to_generic_html():

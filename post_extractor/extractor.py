@@ -500,22 +500,28 @@ class JobPosting:
     locations: list[str] | None = None
     technologies: list[str] | None = None
     company_sector_tags: list[str] | None = None
+    skills_and_expertise: list[str] | None = None
     data_testid_values: dict[str, list[str]] | None = None
 
     def to_markdown(self) -> str:
         body = _render_markdown(self.description_html)
+        skills_and_expertise = self._render_skills_and_expertise()
         attachments = self._render_attachments()
         metadata = self._render_metadata()
         if self.title and body:
-            return f"# {self.title}\n\n{metadata}{body}{attachments}"
+            return f"# {self.title}\n\n{metadata}{body}{skills_and_expertise}{attachments}"
         if self.title:
-            return f"# {self.title}{attachments}" if not metadata else f"# {self.title}\n\n{metadata.rstrip()}{attachments}"
+            if not metadata:
+                return f"# {self.title}{skills_and_expertise}{attachments}"
+            return f"# {self.title}\n\n{metadata.rstrip()}{skills_and_expertise}{attachments}"
         if self.company and body:
-            return f"{metadata}{body}{attachments}"
+            return f"{metadata}{body}{skills_and_expertise}{attachments}"
         if metadata:
-            return f"{metadata.rstrip()}{attachments}"
+            return f"{metadata.rstrip()}{skills_and_expertise}{attachments}"
         if body:
-            return f"{body}{attachments}"
+            return f"{body}{skills_and_expertise}{attachments}"
+        if skills_and_expertise:
+            return f"{skills_and_expertise.lstrip()}{attachments}"
         return attachments.lstrip("\n") if attachments else ""
 
     def _render_metadata(self) -> str:
@@ -543,6 +549,15 @@ class JobPosting:
         lines = ["", "", "## Attachments", ""]
         for attachment in self.attachments:
             lines.append(f"- [{attachment.file_name}]({attachment.url})")
+        return "\n".join(lines) + "\n"
+
+    def _render_skills_and_expertise(self) -> str:
+        if not self.skills_and_expertise:
+            return ""
+
+        lines = ["", "", "## Skills and Expertise", ""]
+        for skill in self.skills_and_expertise:
+            lines.append(f"- {skill}")
         return "\n".join(lines) + "\n"
 
 
@@ -611,12 +626,14 @@ class UpworkExtractor:
             raise ValueError(str(error)) from error
 
     def extract_or_raise_mismatch(self) -> JobPosting:
-        job = self._get_state()["vuex"]["jobDetails"]["job"]
+        job_details = self._get_state()["vuex"]["jobDetails"]
+        job = job_details["job"]
         description_html = self._extract_description(job)
         return JobPosting(
             title=job.get("title", "").strip(),
             description_html=description_html,
             attachments=self._extract_attachments(job),
+            skills_and_expertise=self._extract_skills_and_expertise(job_details),
         )
 
     def _extract_description(self, job: dict[str, Any]) -> str:
@@ -651,6 +668,66 @@ class UpworkExtractor:
             )
 
         return extracted_attachments
+
+    def _extract_skills_and_expertise(self, job_details: dict[str, Any]) -> list[str]:
+        sands = job_details.get("sands")
+        if not isinstance(sands, dict):
+            return []
+
+        skills = []
+        skills.extend(self._extract_occupation_skills(sands.get("occupation")))
+        skills.extend(self._extract_grouped_skill_names(sands.get("ontologySkills")))
+        skills.extend(self._extract_skill_names(sands.get("additionalSkills")))
+        return self._dedupe_values(skills)
+
+    def _extract_occupation_skills(self, occupation: Any) -> list[str]:
+        if not isinstance(occupation, dict):
+            return []
+
+        skill_names = []
+        pref_label = occupation.get("prefLabel")
+        if isinstance(pref_label, str) and pref_label.strip():
+            skill_names.append(pref_label.strip())
+        return skill_names
+
+    def _extract_grouped_skill_names(self, ontology_skills: Any) -> list[str]:
+        if not isinstance(ontology_skills, list):
+            return []
+
+        skill_names = []
+        for group in ontology_skills:
+            if not isinstance(group, dict):
+                continue
+
+            skill_names.extend(self._extract_skill_names(group.get("children")))
+
+        return skill_names
+
+    def _extract_skill_names(self, skills: Any) -> list[str]:
+        if not isinstance(skills, list):
+            return []
+
+        skill_names = []
+        for skill in skills:
+            if not isinstance(skill, dict):
+                continue
+
+            name = skill.get("name")
+            if not isinstance(name, str):
+                continue
+
+            normalized_name = name.strip()
+            if normalized_name:
+                skill_names.append(normalized_name)
+
+        return skill_names
+
+    def _dedupe_values(self, values: list[str]) -> list[str]:
+        deduped_values = []
+        for value in values:
+            if value not in deduped_values:
+                deduped_values.append(value)
+        return deduped_values
 
 
 class GenericHtmlExtractor:
