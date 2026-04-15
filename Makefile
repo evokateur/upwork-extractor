@@ -4,7 +4,7 @@ install:
 	uv tool install --editable .
 
 uninstall:
-	uv tool uninstall posting-extract
+	uv tool uninstall post-extractor
 
 test:
 	uv run pytest

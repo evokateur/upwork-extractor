@@ -6,14 +6,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from posting_extractor import (
+from post_extractor import (
     GenericHtmlExtractor,
     UpworkExtractor,
     WelcomeToTheJungleExtractor,
     extract_job_posting,
     select_extractor,
 )
-from posting_extractor import cli
+from post_extractor import cli
 
 
 def make_saved_page(

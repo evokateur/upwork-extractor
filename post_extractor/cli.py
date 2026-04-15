@@ -9,7 +9,7 @@ from .extractor import select_extractor
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="posting-extract",
+        prog="extract-post",
         description="Extract a job posting from an HTML file or URL as Markdown.",
     )
     parser.add_argument(
