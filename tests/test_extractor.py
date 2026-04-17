@@ -23,10 +23,29 @@ def make_saved_page(
     occupation_pref_label: str | None = None,
     ontology_skill_groups: list[dict[str, object]] | None = None,
     additional_skills: list[str] | None = None,
+    category_name: str | None = None,
+    category_group_name: str | None = None,
+    workload: str | None = None,
+    engagement_duration_label: str | None = None,
+    engagement_duration_weeks: int | None = None,
+    contractor_tier: int | None = None,
+    project_types: list[str] | None = None,
+    countries: list[str] | None = None,
+    timezones: list[str] | None = None,
+    screening_questions: list[str] | None = None,
+    location_check_required: bool | None = None,
+    should_have_portfolio: bool | None = None,
+    rising_talent: bool | None = None,
+    min_job_success_score: int | None = None,
+    min_odesk_hours: int | None = None,
 ) -> str:
     attachments = attachments or []
     ontology_skill_groups = ontology_skill_groups or []
     additional_skills = additional_skills or []
+    project_types = project_types or []
+    countries = countries or []
+    timezones = timezones or []
+    screening_questions = screening_questions or []
     payload: list[object] = [
         ["Reactive", 1],
         {"vuex": 2},
@@ -118,6 +137,131 @@ def make_saved_page(
 
     payload[9]["additionalSkills"] = len(payload)
     payload.append(additional_skill_indexes)
+
+    if category_name:
+        category_name_index = len(payload)
+        payload.append(category_name)
+
+        category_index = len(payload)
+        payload.append({"name": category_name_index})
+        payload[4]["category"] = category_index
+
+    if category_group_name:
+        category_group_name_index = len(payload)
+        payload.append(category_group_name)
+
+        category_group_index = len(payload)
+        payload.append({"name": category_group_name_index})
+        payload[4]["categoryGroup"] = category_group_index
+
+    if workload:
+        workload_index = len(payload)
+        payload.append(workload)
+        payload[4]["workload"] = workload_index
+
+    if engagement_duration_label:
+        engagement_duration_label_index = len(payload)
+        payload.append(engagement_duration_label)
+
+        engagement_duration_index = len(payload)
+        payload.append({"label": engagement_duration_label_index})
+        if engagement_duration_weeks is not None:
+            weeks_index = len(payload)
+            payload.append(engagement_duration_weeks)
+            payload[engagement_duration_index]["weeks"] = weeks_index
+        payload[4]["engagementDuration"] = engagement_duration_index
+
+    if contractor_tier is not None:
+        contractor_tier_index = len(payload)
+        payload.append(contractor_tier)
+        payload[4]["contractorTier"] = contractor_tier_index
+
+    if project_types:
+        project_type_indexes = []
+        for project_type in project_types:
+            project_type_label_index = len(payload)
+            payload.append(project_type)
+
+            project_type_index = len(payload)
+            payload.append({"label": project_type_label_index})
+            project_type_indexes.append(project_type_index)
+
+        payload[4]["segmentationData"] = len(payload)
+        payload.append(project_type_indexes)
+
+    qualification_index = None
+    if any(
+        value
+        for value in (
+            countries,
+            timezones,
+            screening_questions,
+        )
+    ) or any(
+        value is not None
+        for value in (
+            location_check_required,
+            should_have_portfolio,
+            rising_talent,
+            min_job_success_score,
+            min_odesk_hours,
+        )
+    ):
+        qualification_index = len(payload)
+        payload.append({})
+        payload[4]["qualifications"] = qualification_index
+
+    if countries and qualification_index is not None:
+        country_indexes = []
+        for country in countries:
+            country_index = len(payload)
+            payload.append(country)
+            country_indexes.append(country_index)
+        payload[qualification_index]["countries"] = len(payload)
+        payload.append(country_indexes)
+
+    if timezones and qualification_index is not None:
+        timezone_indexes = []
+        for timezone in timezones:
+            timezone_index = len(payload)
+            payload.append(timezone)
+            timezone_indexes.append(timezone_index)
+        payload[qualification_index]["timezones"] = len(payload)
+        payload.append(timezone_indexes)
+
+    if location_check_required is not None and qualification_index is not None:
+        payload[qualification_index]["locationCheckRequired"] = len(payload)
+        payload.append(location_check_required)
+
+    if should_have_portfolio is not None and qualification_index is not None:
+        payload[qualification_index]["shouldHavePortfolio"] = len(payload)
+        payload.append(should_have_portfolio)
+
+    if rising_talent is not None and qualification_index is not None:
+        payload[qualification_index]["risingTalent"] = len(payload)
+        payload.append(rising_talent)
+
+    if min_job_success_score is not None and qualification_index is not None:
+        payload[qualification_index]["minJobSuccessScore"] = len(payload)
+        payload.append(min_job_success_score)
+
+    if min_odesk_hours is not None and qualification_index is not None:
+        payload[qualification_index]["minOdeskHours"] = len(payload)
+        payload.append(min_odesk_hours)
+
+    if screening_questions:
+        question_indexes = []
+        for question in screening_questions:
+            question_text_index = len(payload)
+            payload.append(question)
+
+            question_index = len(payload)
+            payload.append({"question": question_text_index})
+            question_indexes.append(question_index)
+
+        payload[4]["questions"] = len(payload)
+        payload.append(question_indexes)
+
     raw_json = json.dumps(payload)
     return f'<html><body><script type="application/json">{raw_json}</script></body></html>'
 
@@ -358,6 +502,74 @@ def test_upwork_example_file_contains_skills_and_expertise_in_output():
     assert "Vector Database" in job.skills_and_expertise
     assert "Pinecone" in job.skills_and_expertise
     assert "## Skills and Expertise" in job.to_markdown()
+
+
+def test_upwork_extracts_additional_payload_fields():
+    html = make_saved_page(
+        "<p>Converted</p>",
+        category_name="AI & Machine Learning",
+        category_group_name="Data Science & Analytics",
+        workload="Less than 30 hrs/week",
+        engagement_duration_label="Less than 1 month",
+        engagement_duration_weeks=3,
+        contractor_tier=3,
+        project_types=["One-time project"],
+        countries=["United States"],
+        timezones=["UTC-05:00"],
+        screening_questions=[
+            "Describe a similar retrieval workflow you have built.",
+        ],
+        location_check_required=True,
+        should_have_portfolio=False,
+        rising_talent=False,
+        min_job_success_score=90,
+        min_odesk_hours=100,
+    )
+
+    job = UpworkExtractor.from_string(html).extract()
+
+    assert job.category == "AI & Machine Learning"
+    assert job.category_group == "Data Science & Analytics"
+    assert job.workload == "Less than 30 hrs/week"
+    assert job.engagement_duration == "Less than 1 month (3 weeks)"
+    assert job.contractor_tier == "3"
+    assert job.project_types == ["One-time project"]
+    assert job.countries == ["United States"]
+    assert job.timezones == ["UTC-05:00"]
+    assert job.screening_questions == [
+        "Describe a similar retrieval workflow you have built.",
+    ]
+    assert job.location_requirement == "Required"
+    assert job.portfolio_requirement == "Not required"
+    assert job.rising_talent_preference == "Not required"
+    assert job.job_success_score == "90%"
+    assert job.odesk_hours == "100 hours"
+    assert "- **Category:** AI & Machine Learning" in job.to_markdown()
+    assert "- **Project Types:** One-time project" in job.to_markdown()
+    assert "- **Timezones:** UTC-05:00" in job.to_markdown()
+    assert "## Screening Questions" in job.to_markdown()
+
+
+def test_upwork_example_file_contains_additional_payload_fields():
+    html = Path("docs/examples/upwork.html").read_text(encoding="utf-8")
+
+    job = UpworkExtractor.from_string(html).extract()
+
+    assert job.category == "AI & Machine Learning"
+    assert job.category_group == "Data Science & Analytics"
+    assert job.workload == "Less than 30 hrs/week"
+    assert job.engagement_duration == "Less than 1 month (3 weeks)"
+    assert job.contractor_tier == "3"
+    assert job.project_types == ["One-time project"]
+    assert job.countries == ["United States"]
+    assert job.timezones == ["UTC-05:00"]
+    assert job.location_requirement == "Required"
+    assert job.portfolio_requirement == "Not required"
+    assert job.rising_talent_preference == "Not required"
+    assert job.job_success_score == "0%"
+    assert job.odesk_hours == "0 hours"
+    assert "- **Category Group:** Data Science & Analytics" in job.to_markdown()
+    assert "- **Engagement Duration:** Less than 1 month (3 weeks)" in job.to_markdown()
 
 
 def test_extract_job_posting_falls_back_to_generic_html():

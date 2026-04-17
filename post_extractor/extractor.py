@@ -497,7 +497,24 @@ class JobPosting:
     company: str = ""
     salary: str = ""
     experience: str = ""
+    category: str = ""
+    category_group: str = ""
+    project_types: list[str] | None = None
+    workload: str = ""
+    engagement_duration: str = ""
+    contractor_tier: str = ""
     locations: list[str] | None = None
+    countries: list[str] | None = None
+    regions: list[str] | None = None
+    states: list[str] | None = None
+    timezones: list[str] | None = None
+    languages: list[str] | None = None
+    screening_questions: list[str] | None = None
+    location_requirement: str = ""
+    portfolio_requirement: str = ""
+    rising_talent_preference: str = ""
+    job_success_score: str = ""
+    odesk_hours: str = ""
     technologies: list[str] | None = None
     company_sector_tags: list[str] | None = None
     skills_and_expertise: list[str] | None = None
@@ -506,22 +523,25 @@ class JobPosting:
     def to_markdown(self) -> str:
         body = _render_markdown(self.description_html)
         skills_and_expertise = self._render_skills_and_expertise()
+        screening_questions = self._render_screening_questions()
         attachments = self._render_attachments()
         metadata = self._render_metadata()
         if self.title and body:
-            return f"# {self.title}\n\n{metadata}{body}{skills_and_expertise}{attachments}"
+            return f"# {self.title}\n\n{metadata}{body}{skills_and_expertise}{screening_questions}{attachments}"
         if self.title:
             if not metadata:
-                return f"# {self.title}{skills_and_expertise}{attachments}"
-            return f"# {self.title}\n\n{metadata.rstrip()}{skills_and_expertise}{attachments}"
+                return f"# {self.title}{skills_and_expertise}{screening_questions}{attachments}"
+            return f"# {self.title}\n\n{metadata.rstrip()}{skills_and_expertise}{screening_questions}{attachments}"
         if self.company and body:
-            return f"{metadata}{body}{skills_and_expertise}{attachments}"
+            return f"{metadata}{body}{skills_and_expertise}{screening_questions}{attachments}"
         if metadata:
-            return f"{metadata.rstrip()}{skills_and_expertise}{attachments}"
+            return f"{metadata.rstrip()}{skills_and_expertise}{screening_questions}{attachments}"
         if body:
-            return f"{body}{skills_and_expertise}{attachments}"
+            return f"{body}{skills_and_expertise}{screening_questions}{attachments}"
         if skills_and_expertise:
-            return f"{skills_and_expertise.lstrip()}{attachments}"
+            return f"{skills_and_expertise.lstrip()}{screening_questions}{attachments}"
+        if screening_questions:
+            return f"{screening_questions.lstrip()}{attachments}"
         return attachments.lstrip("\n") if attachments else ""
 
     def _render_metadata(self) -> str:
@@ -532,8 +552,40 @@ class JobPosting:
             lines.append(f"- **Salary:** {self.salary}")
         if self.experience:
             lines.append(f"- **Experience:** {self.experience}")
+        if self.category:
+            lines.append(f"- **Category:** {self.category}")
+        if self.category_group:
+            lines.append(f"- **Category Group:** {self.category_group}")
+        if self.project_types:
+            lines.append(f"- **Project Types:** {', '.join(self.project_types)}")
+        if self.workload:
+            lines.append(f"- **Workload:** {self.workload}")
+        if self.engagement_duration:
+            lines.append(f"- **Engagement Duration:** {self.engagement_duration}")
+        if self.contractor_tier:
+            lines.append(f"- **Contractor Tier:** {self.contractor_tier}")
         if self.locations:
             lines.append(f"- **Locations:** {', '.join(self.locations)}")
+        if self.countries:
+            lines.append(f"- **Countries:** {', '.join(self.countries)}")
+        if self.regions:
+            lines.append(f"- **Regions:** {', '.join(self.regions)}")
+        if self.states:
+            lines.append(f"- **States:** {', '.join(self.states)}")
+        if self.timezones:
+            lines.append(f"- **Timezones:** {', '.join(self.timezones)}")
+        if self.languages:
+            lines.append(f"- **Languages:** {', '.join(self.languages)}")
+        if self.location_requirement:
+            lines.append(f"- **Location Requirement:** {self.location_requirement}")
+        if self.portfolio_requirement:
+            lines.append(f"- **Portfolio Requirement:** {self.portfolio_requirement}")
+        if self.rising_talent_preference:
+            lines.append(f"- **Rising Talent Preference:** {self.rising_talent_preference}")
+        if self.job_success_score:
+            lines.append(f"- **Minimum Job Success Score:** {self.job_success_score}")
+        if self.odesk_hours:
+            lines.append(f"- **Minimum Odesk Hours:** {self.odesk_hours}")
         if self.technologies:
             lines.append(f"- **Technologies:** {', '.join(self.technologies)}")
         if self.company_sector_tags:
@@ -558,6 +610,15 @@ class JobPosting:
         lines = ["", "", "## Skills and Expertise", ""]
         for skill in self.skills_and_expertise:
             lines.append(f"- {skill}")
+        return "\n".join(lines) + "\n"
+
+    def _render_screening_questions(self) -> str:
+        if not self.screening_questions:
+            return ""
+
+        lines = ["", "", "## Screening Questions", ""]
+        for question in self.screening_questions:
+            lines.append(f"- {question}")
         return "\n".join(lines) + "\n"
 
 
@@ -626,21 +687,59 @@ class UpworkExtractor:
             raise ValueError(str(error)) from error
 
     def extract_or_raise_mismatch(self) -> JobPosting:
-        job_details = self._get_state()["vuex"]["jobDetails"]
-        job = job_details["job"]
-        description_html = self._extract_description(job)
+        job_details = self._get_job_details()
+        job = self._get_job(job_details)
         return JobPosting(
-            title=job.get("title", "").strip(),
-            description_html=description_html,
+            title=self._extract_title(job),
+            description_html=self._extract_description(job),
             attachments=self._extract_attachments(job),
+            category=self._extract_named_value(job.get("category")),
+            category_group=self._extract_named_value(job.get("categoryGroup")),
+            project_types=self._extract_project_types(job),
+            workload=self._extract_string(job.get("workload")),
+            engagement_duration=self._extract_engagement_duration(job),
+            contractor_tier=self._extract_contractor_tier(job),
+            countries=self._extract_qualification_list(job, "countries"),
+            regions=self._extract_qualification_list(job, "regions"),
+            states=self._extract_qualification_list(job, "states"),
+            timezones=self._extract_qualification_list(job, "timezones"),
+            languages=self._extract_qualification_list(job, "languages"),
+            screening_questions=self._extract_screening_questions(job),
+            location_requirement=self._extract_location_requirement(job),
+            portfolio_requirement=self._extract_boolean_requirement(
+                job,
+                field_name="shouldHavePortfolio",
+                true_value="Required",
+                false_value="Not required",
+            ),
+            rising_talent_preference=self._extract_boolean_requirement(
+                job,
+                field_name="risingTalent",
+                true_value="Preferred",
+                false_value="Not required",
+            ),
+            job_success_score=self._extract_numeric_requirement(job, "minJobSuccessScore", suffix="%"),
+            odesk_hours=self._extract_numeric_requirement(job, "minOdeskHours", suffix=" hours"),
             skills_and_expertise=self._extract_skills_and_expertise(job_details),
         )
 
+    def _get_job_details(self) -> dict[str, Any]:
+        return self._get_state()["vuex"]["jobDetails"]
+
+    def _get_job(self, job_details: dict[str, Any]) -> dict[str, Any]:
+        return job_details["job"]
+
+    def _extract_title(self, job: dict[str, Any]) -> str:
+        title = job.get("title")
+        if not isinstance(title, str):
+            return ""
+        return title.strip()
+
     def _extract_description(self, job: dict[str, Any]) -> str:
         for field_name in ("descriptionHtml", "description", "legacyCiphertextDescription"):
-            value = job.get(field_name)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+            value = self._extract_string(job.get(field_name))
+            if value:
+                return value
         return ""
 
     def _extract_attachments(self, job: dict[str, Any]) -> list[Attachment]:
@@ -650,47 +749,54 @@ class UpworkExtractor:
 
         extracted_attachments = []
         for attachment in attachments:
-            if not isinstance(attachment, dict):
-                continue
-
-            file_name = attachment.get("fileName")
-            uri = attachment.get("uri")
-            if not isinstance(file_name, str) or not file_name.strip():
-                continue
-            if not isinstance(uri, str) or not uri.startswith("/"):
-                continue
-
-            extracted_attachments.append(
-                Attachment(
-                    file_name=file_name.strip(),
-                    url=f"{_UPWORK_BASE_URL}{uri}",
-                )
-            )
-
+            extracted_attachment = self._extract_attachment(attachment)
+            if extracted_attachment is not None:
+                extracted_attachments.append(extracted_attachment)
         return extracted_attachments
 
+    def _extract_attachment(self, attachment: Any) -> Attachment | None:
+        if not isinstance(attachment, dict):
+            return None
+
+        file_name = self._extract_string(attachment.get("fileName"))
+        uri = attachment.get("uri")
+        if not file_name:
+            return None
+        if not isinstance(uri, str) or not uri.startswith("/"):
+            return None
+
+        return Attachment(
+            file_name=file_name,
+            url=f"{_UPWORK_BASE_URL}{uri}",
+        )
+
     def _extract_skills_and_expertise(self, job_details: dict[str, Any]) -> list[str]:
-        sands = job_details.get("sands")
-        if not isinstance(sands, dict):
+        skills_payload = self._get_skills_payload(job_details)
+        if not skills_payload:
             return []
 
         skills = []
-        skills.extend(self._extract_occupation_skills(sands.get("occupation")))
-        skills.extend(self._extract_grouped_skill_names(sands.get("ontologySkills")))
-        skills.extend(self._extract_skill_names(sands.get("additionalSkills")))
+        skills.extend(self._extract_occupation_skills(skills_payload))
+        skills.extend(self._extract_ontology_skills(skills_payload))
+        skills.extend(self._extract_additional_skills(skills_payload))
         return self._dedupe_values(skills)
 
-    def _extract_occupation_skills(self, occupation: Any) -> list[str]:
+    def _get_skills_payload(self, job_details: dict[str, Any]) -> dict[str, Any]:
+        sands = job_details.get("sands")
+        if not isinstance(sands, dict):
+            return {}
+        return sands
+
+    def _extract_occupation_skills(self, skills_payload: dict[str, Any]) -> list[str]:
+        occupation = skills_payload.get("occupation")
         if not isinstance(occupation, dict):
             return []
 
-        skill_names = []
-        pref_label = occupation.get("prefLabel")
-        if isinstance(pref_label, str) and pref_label.strip():
-            skill_names.append(pref_label.strip())
-        return skill_names
+        pref_label = self._extract_string(occupation.get("prefLabel"))
+        return [pref_label] if pref_label else []
 
-    def _extract_grouped_skill_names(self, ontology_skills: Any) -> list[str]:
+    def _extract_ontology_skills(self, skills_payload: dict[str, Any]) -> list[str]:
+        ontology_skills = skills_payload.get("ontologySkills")
         if not isinstance(ontology_skills, list):
             return []
 
@@ -698,10 +804,124 @@ class UpworkExtractor:
         for group in ontology_skills:
             if not isinstance(group, dict):
                 continue
-
             skill_names.extend(self._extract_skill_names(group.get("children")))
-
         return skill_names
+
+    def _extract_additional_skills(self, skills_payload: dict[str, Any]) -> list[str]:
+        return self._extract_skill_names(skills_payload.get("additionalSkills"))
+
+    def _extract_named_value(self, value: Any) -> str:
+        if not isinstance(value, dict):
+            return ""
+        return self._extract_string(value.get("name"))
+
+    def _extract_project_types(self, job: dict[str, Any]) -> list[str]:
+        segmentation_data = job.get("segmentationData")
+        if not isinstance(segmentation_data, list):
+            return []
+
+        project_types = []
+        for item in segmentation_data:
+            if not isinstance(item, dict):
+                continue
+
+            label = self._extract_string(item.get("label"))
+            if label:
+                project_types.append(label)
+
+        return self._dedupe_values(project_types)
+
+    def _extract_engagement_duration(self, job: dict[str, Any]) -> str:
+        engagement_duration = job.get("engagementDuration")
+        if not isinstance(engagement_duration, dict):
+            return ""
+
+        label = self._extract_string(engagement_duration.get("label"))
+        weeks = engagement_duration.get("weeks")
+        if label and isinstance(weeks, int):
+            return f"{label} ({weeks} weeks)"
+        return label
+
+    def _extract_contractor_tier(self, job: dict[str, Any]) -> str:
+        contractor_tier = job.get("contractorTier")
+        if contractor_tier is None:
+            return ""
+        return str(contractor_tier).strip()
+
+    def _extract_qualification_list(self, job: dict[str, Any], field_name: str) -> list[str]:
+        qualifications = job.get("qualifications")
+        if not isinstance(qualifications, dict):
+            return []
+
+        values = qualifications.get(field_name)
+        if not isinstance(values, list):
+            return []
+
+        extracted_values = []
+        for value in values:
+            normalized_value = self._extract_string(value)
+            if normalized_value:
+                extracted_values.append(normalized_value)
+
+        return self._dedupe_values(extracted_values)
+
+    def _extract_screening_questions(self, job: dict[str, Any]) -> list[str]:
+        questions = job.get("questions")
+        if not isinstance(questions, list):
+            return []
+
+        extracted_questions = []
+        for question in questions:
+            if isinstance(question, dict):
+                text = self._extract_string(question.get("question"))
+                if not text:
+                    text = self._extract_string(question.get("text"))
+            else:
+                text = self._extract_string(question)
+
+            if text:
+                extracted_questions.append(text)
+
+        return self._dedupe_values(extracted_questions)
+
+    def _extract_location_requirement(self, job: dict[str, Any]) -> str:
+        qualifications = job.get("qualifications")
+        if not isinstance(qualifications, dict):
+            return ""
+
+        if qualifications.get("locationCheckRequired") is True:
+            return "Required"
+        if qualifications.get("locationCheckRequired") is False:
+            return "Not required"
+        return ""
+
+    def _extract_boolean_requirement(
+        self,
+        job: dict[str, Any],
+        field_name: str,
+        true_value: str,
+        false_value: str,
+    ) -> str:
+        qualifications = job.get("qualifications")
+        if not isinstance(qualifications, dict):
+            return ""
+
+        value = qualifications.get(field_name)
+        if value is True:
+            return true_value
+        if value is False:
+            return false_value
+        return ""
+
+    def _extract_numeric_requirement(self, job: dict[str, Any], field_name: str, suffix: str) -> str:
+        qualifications = job.get("qualifications")
+        if not isinstance(qualifications, dict):
+            return ""
+
+        value = qualifications.get(field_name)
+        if not isinstance(value, int | float):
+            return ""
+        return f"{value}{suffix}"
 
     def _extract_skill_names(self, skills: Any) -> list[str]:
         if not isinstance(skills, list):
@@ -712,14 +932,9 @@ class UpworkExtractor:
             if not isinstance(skill, dict):
                 continue
 
-            name = skill.get("name")
-            if not isinstance(name, str):
-                continue
-
-            normalized_name = name.strip()
-            if normalized_name:
-                skill_names.append(normalized_name)
-
+            name = self._extract_string(skill.get("name"))
+            if name:
+                skill_names.append(name)
         return skill_names
 
     def _dedupe_values(self, values: list[str]) -> list[str]:
@@ -728,6 +943,11 @@ class UpworkExtractor:
             if value not in deduped_values:
                 deduped_values.append(value)
         return deduped_values
+
+    def _extract_string(self, value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        return value.strip()
 
 
 class GenericHtmlExtractor:
