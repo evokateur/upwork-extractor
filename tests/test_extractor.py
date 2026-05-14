@@ -572,6 +572,29 @@ def test_upwork_example_file_contains_additional_payload_fields():
     assert "- **Engagement Duration:** Less than 1 month (3 weeks)" in job.to_markdown()
 
 
+def test_upwork_latest_nuxt_html_is_detected_and_extracted():
+    html = Path("docs/examples/upwork-latest.html").read_text(encoding="utf-8")
+
+    assert UpworkExtractor.matches(html) is True
+    assert select_extractor(html) is UpworkExtractor
+
+    job = UpworkExtractor.from_string(html).extract()
+
+    assert job.title == "PHP 5 to 8 Migration and Rebuild"
+    assert "PHP 5 platform to PHP 8" in job.to_markdown()
+    assert job.category == "Full Stack Development"
+    assert job.workload == "More than 30 hrs/week"
+    assert job.engagement_duration == "1 to 3 months"
+    assert job.experience.startswith("Expert")
+    assert job.project_types == ["Complex project"]
+    assert job.countries == ["Worldwide"]
+    assert job.job_success_score == "90%"
+    assert job.rising_talent_preference == "Preferred"
+    assert len(job.screening_questions or []) == 5
+    assert "PHP" in (job.skills_and_expertise or [])
+    assert "MySQL" in (job.skills_and_expertise or [])
+
+
 def test_extract_job_posting_falls_back_to_generic_html():
     job = extract_job_posting(
         make_generic_job_page(),

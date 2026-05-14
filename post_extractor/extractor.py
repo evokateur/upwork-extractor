@@ -440,6 +440,17 @@ def _extract_flat_text_from_testid_container(html: str, container_testid: str) -
     return _dedupe_repeated_phrase(parser.value)
 
 
+def _extract_data_test_content(html: str, data_test: str) -> str:
+    pattern = re.compile(
+        rf'<(?P<tag>\w+)\b[^>]*data-test=["\']{re.escape(data_test)}["\'][^>]*>(.*?)</(?P=tag)>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    match = pattern.search(html)
+    if not match:
+        return ""
+    return match.group(2).strip()
+
+
 def _revive_devalue(data: list[Any]) -> Any:
     cache: dict[int, Any] = {}
 
@@ -630,6 +641,18 @@ class UpworkExtractor:
         r'<script[^>]+type=["\']application/json["\'][^>]*>(.*?)</script>',
         re.DOTALL,
     )
+    _NUXT_WORKLOAD_RE = re.compile(
+        r'data-test=["\']job-metrics-workload["\'][^>]*>.*?<span[^>]*label-medium[^>]*>(.*?)</span>.*?<span[^>]*body-small[^>]*>(.*?)</span>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    _NUXT_DURATION_RE = re.compile(
+        r'data-test=["\']job-metrics-duration["\'][^>]*>.*?<span[^>]*label-medium[^>]*>(.*?)</span>.*?<span[^>]*body-small[^>]*>(.*?)</span>',
+        re.IGNORECASE | re.DOTALL,
+    )
+    _NUXT_EXPERIENCE_RE = re.compile(
+        r'data-test=["\']job-metrics-experience["\'][^>]*>.*?<span[^>]*label-medium[^>]*>(.*?)</span>.*?<span[^>]*body-small[^>]*>(.*?)</span>',
+        re.IGNORECASE | re.DOTALL,
+    )
 
     def __init__(self, html: str):
         self._html = html
@@ -657,7 +680,18 @@ class UpworkExtractor:
             if _contains_upwork_job_payload(flat):
                 return True
 
-        return False
+        return cls._matches_nuxt_job_page(html)
+
+    @classmethod
+    def _matches_nuxt_job_page(cls, html: str) -> bool:
+        return all(
+            marker in html
+            for marker in (
+                'id="__NUXT_DATA__"',
+                'data-test="job-title"',
+                'data-test="job-description-content"',
+            )
+        )
 
     def _get_state(self) -> dict[str, Any]:
         if self._state is not None:
@@ -687,7 +721,13 @@ class UpworkExtractor:
             raise ValueError(str(error)) from error
 
     def extract_or_raise_mismatch(self) -> JobPosting:
-        job_details = self._get_job_details()
+        try:
+            job_details = self._get_job_details()
+        except ExtractorMismatchError:
+            if self._matches_nuxt_job_page(self._html):
+                return self._extract_nuxt_job_posting()
+            raise
+
         job = self._get_job(job_details)
         return JobPosting(
             title=self._extract_title(job),
@@ -722,6 +762,115 @@ class UpworkExtractor:
             odesk_hours=self._extract_numeric_requirement(job, "minOdeskHours", suffix=" hours"),
             skills_and_expertise=self._extract_skills_and_expertise(job_details),
         )
+
+    def _extract_nuxt_job_posting(self) -> JobPosting:
+        description_html = _extract_data_test_content(self._html, "job-description-content")
+        return JobPosting(
+            title=self._extract_nuxt_title(),
+            description_html=description_html,
+            attachments=[],
+            category=self._extract_nuxt_category(),
+            project_types=self._extract_nuxt_project_types(),
+            workload=self._extract_nuxt_metric(self._NUXT_WORKLOAD_RE, skip_value="Hourly"),
+            engagement_duration=self._extract_nuxt_metric(self._NUXT_DURATION_RE, skip_value="Duration"),
+            experience=self._extract_nuxt_metric(self._NUXT_EXPERIENCE_RE),
+            countries=self._extract_nuxt_countries(),
+            screening_questions=self._extract_nuxt_questions(),
+            rising_talent_preference=self._extract_nuxt_rising_talent_preference(),
+            job_success_score=self._extract_nuxt_job_success_score(),
+            skills_and_expertise=self._extract_nuxt_skills(),
+        )
+
+    def _extract_nuxt_title(self) -> str:
+        return _strip_tags(_extract_data_test_content(self._html, "job-title"))
+
+    def _extract_nuxt_category(self) -> str:
+        category_html = _extract_data_test_content(self._html, "category")
+        category_text = _strip_tags(category_html)
+        if category_text.startswith("current page "):
+            return category_text.removeprefix("current page ").strip()
+        return category_text
+
+    def _extract_nuxt_metric(self, pattern: re.Pattern[str], skip_value: str = "") -> str:
+        match = pattern.search(self._html)
+        if not match:
+            return ""
+
+        values = []
+        for raw_value in match.groups():
+            normalized_value = _strip_tags(raw_value)
+            if not normalized_value or normalized_value == skip_value:
+                continue
+            values.append(normalized_value)
+
+        return " ".join(values).strip()
+
+    def _extract_nuxt_project_types(self) -> list[str]:
+        segmentations_html = _extract_data_test_content(self._html, "segmentations")
+        match = re.search(
+            r'Project Type:</span>\s*<span[^>]*>(.*?)</span>',
+            segmentations_html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return []
+        project_type = _strip_tags(match.group(1))
+        return [project_type] if project_type else []
+
+    def _extract_nuxt_questions(self) -> list[str]:
+        questions_html = _extract_data_test_content(self._html, "questions-list")
+        if not questions_html:
+            return []
+
+        questions = []
+        for match in re.finditer(
+            r'<li\b[^>]*data-test=["\']question-item["\'][^>]*>(.*?)</li>',
+            questions_html,
+            re.IGNORECASE | re.DOTALL,
+        ):
+            question = _strip_tags(match.group(1))
+            if question:
+                questions.append(question)
+        return self._dedupe_values(questions)
+
+    def _extract_nuxt_skills(self) -> list[str]:
+        skills = []
+        for match in re.finditer(
+            r'<(?:a|span)\b[^>]*class=["\'][^"\']*skill-tag-host[^"\']*["\'][^>]*>(.*?)</(?:a|span)>',
+            self._html,
+            re.IGNORECASE | re.DOTALL,
+        ):
+            skill = _strip_tags(match.group(1))
+            if skill:
+                skills.append(skill)
+        return self._dedupe_values(skills)
+
+    def _extract_nuxt_countries(self) -> list[str]:
+        match = re.search(
+            r'data-test=["\']location-label["\'][^>]*>.*?<span\b[^>]*tabindex=["\']0["\'][^>]*>(.*?)</span>',
+            self._html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return []
+
+        country = _strip_tags(match.group(1))
+        return [country] if country else []
+
+    def _extract_nuxt_rising_talent_preference(self) -> str:
+        qualification_text = _strip_tags(_extract_data_test_content(self._html, "qualification-rising-talent"))
+        if qualification_text.endswith("Yes"):
+            return "Preferred"
+        if qualification_text.endswith("No"):
+            return "Not required"
+        return ""
+
+    def _extract_nuxt_job_success_score(self) -> str:
+        qualification_text = _strip_tags(_extract_data_test_content(self._html, "qualification-job-success-score"))
+        match = re.search(r'(\d+%)', qualification_text)
+        if not match:
+            return ""
+        return match.group(1)
 
     def _get_job_details(self) -> dict[str, Any]:
         return self._get_state()["vuex"]["jobDetails"]
